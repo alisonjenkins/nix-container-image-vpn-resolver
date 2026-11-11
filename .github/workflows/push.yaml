@@ -1,0 +1,31 @@
+name: push
+run-name: push image to GHCR
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  push-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-nix
+      - name: Build the image
+        run: nix build -o container '.#packages.x86_64-linux.container'
+      - name: Push to ghcr.io/${{ github.repository_owner }}/vpn-resolver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/vpn-resolver"
+          TAG="$(date -u +'%Y-%m-%d_%H-%M')-${GITHUB_SHA::7}"
+          for t in "$TAG" latest; do
+            nix develop --command skopeo copy \
+              --dest-creds "${{ github.actor }}:$GH_TOKEN" \
+              docker-archive:container "docker://$IMAGE:$t"
+          done
+          echo "Pushed $IMAGE:$TAG" >> "$GITHUB_STEP_SUMMARY"

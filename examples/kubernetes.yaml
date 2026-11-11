@@ -1,0 +1,106 @@
+# Example only: the real manifests live in alisonjenkins/home-cluster.
+# One Deployment per VPN server; this is resolver "a".
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vpn-resolver
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vpn-resolver-a
+  namespace: vpn-resolver
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vpn-resolver
+      app.kubernetes.io/instance: a
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vpn-resolver
+        app.kubernetes.io/instance: a
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: home-k8s-master-1
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: resolver
+          image: ghcr.io/alisonjenkins/vpn-resolver:latest # pin a dated tag
+          env:
+            - name: ALLOWED_CLIENTS
+              # Pod CIDR plus the node IPs, since CoreDNS-lan uses hostNetwork.
+              value: 10.42.0.0/16, 192.168.1.0/24
+          securityContext:
+            # Needed to create network namespaces, WireGuard and nftables.
+            privileged: true
+          ports:
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command: ["/bin/vpn-resolver-check"]
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["/bin/vpn-resolver-check"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi # Unbound caches: 64m msg + 128m rrset, plus overhead
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: wireguard
+              mountPath: /etc/wireguard
+              readOnly: true
+      volumes:
+        - name: wireguard
+          secret:
+            secretName: vpn-resolver-a-wireguard # key: wg0.conf (Proton, Endpoint as an IP)
+            defaultMode: 0400
+---
+# Third layer: Cilium only lets the pod send WireGuard to its own endpoint, and
+# only accepts DNS from the nodes (CoreDNS-lan runs with hostNetwork).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vpn-resolver-a
+  namespace: vpn-resolver
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vpn-resolver
+      app.kubernetes.io/instance: a
+  egress:
+    - toCIDR:
+        - 203.0.113.10/32 # the Proton endpoint IP from wg0.conf
+      toPorts:
+        - ports:
+            - port: "51820"
+              protocol: UDP
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
