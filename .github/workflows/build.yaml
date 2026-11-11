@@ -9,9 +9,9 @@ jobs:
   build-image:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-nix
-      - uses: DeterminateSystems/flake-checker-action@main
+      - uses: DeterminateSystems/flake-checker-action@786422608c7bded2bbc9741ad9f91356842bf520 # v14
       - name: Build the scripts (runs shellcheck)
         run: nix flake check
       - name: Build the image
@@ -24,7 +24,7 @@ jobs:
       matrix:
         wireguard: [kernel, userspace]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup-nix
       - name: Build the test
         run: nix build -o netns-test '.#packages.x86_64-linux.netns-test'
