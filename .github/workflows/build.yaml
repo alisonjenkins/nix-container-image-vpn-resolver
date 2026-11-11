@@ -1,0 +1,32 @@
+name: build
+run-name: build and leak-test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-nix
+      - uses: DeterminateSystems/flake-checker-action@main
+      - name: Build the scripts (runs shellcheck)
+        run: nix flake check
+      - name: Build the image
+        run: nix build -o container '.#packages.x86_64-linux.container'
+
+  leak-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        wireguard: [kernel, userspace]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-nix
+      - name: Build the test
+        run: nix build -o netns-test '.#packages.x86_64-linux.netns-test'
+      - name: Run the namespace leak test (${{ matrix.wireguard }} WireGuard)
+        run: sudo env WG_USERSPACE=${{ matrix.wireguard == 'userspace' && '1' || '0' }} ./netns-test/bin/netns-test
