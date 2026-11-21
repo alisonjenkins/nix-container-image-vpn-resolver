@@ -42,6 +42,9 @@ server:
 
     access-control: 0.0.0.0/0 refuse
     access-control: $VETH_OUTER_IP/32 allow
+    # Kubelet exec probes join PID 1's netns, which is the inner one, so
+    # vpn-resolver-check queries from $VETH_INNER_IP over lo.
+    access-control: $VETH_INNER_IP/32 allow
 
     num-threads: 2
     msg-cache-size: 64m
