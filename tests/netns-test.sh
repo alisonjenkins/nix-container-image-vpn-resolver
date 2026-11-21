@@ -159,6 +159,11 @@ if p env NETNS="$VPN" PROBE_NAME=through-tunnel.example vpn-resolver-check; then
   pass "readiness probe succeeds"
 else fail "readiness probe failed"; fi
 
+# Kubelet runs exec probes in PID 1's netns: the inner one Unbound lives in.
+if v env PROBE_NAME=through-tunnel.example vpn-resolver-check; then
+  pass "readiness probe succeeds from the inner netns"
+else fail "readiness probe failed from the inner netns"; fi
+
 links="$(v ip -o link show 2>/dev/null | awk -F': ' '{ sub(/@.*/, "", $2); print $2 }' | sort | tr '\n' ' ')"
 expect "$links" "lo veth-in wg0 " "inner netns holds only lo, veth-in, wg0"
 
